@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# Runtime files from older builds that stored settings next to main.js
+config.json
+state.json

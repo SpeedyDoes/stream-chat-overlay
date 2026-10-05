@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+  <title>Stream Chat Overlay</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <header class="app-header">
+    <img class="app-icon" src="assets/icon.svg" alt="" width="44" height="44">
+    <div class="app-title">
+      <h1>Stream Chat Overlay</h1>
+      <div id="status" class="status pending" role="status">
+        <span class="dot"></span><span id="statusText">Starting...</span>
+      </div>
+    </div>
+    <p class="app-hint">Minimize &rarr; keeps running in the tray<br>Close &rarr; quits the overlay</p>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Settings">
+    <button type="button" role="tab" id="tab-overlay" aria-controls="panel-overlay">Overlay</button>
+    <button type="button" role="tab" id="tab-chat" aria-controls="panel-chat">Chat</button>
+    <button type="button" role="tab" id="tab-appearance" aria-controls="panel-appearance">Appearance</button>
+    <button type="button" role="tab" id="tab-filters" aria-controls="panel-filters">Filters</button>
+    <button type="button" role="tab" id="tab-hotkeys" aria-controls="panel-hotkeys">Hotkeys</button>
+    <button type="button" role="tab" id="tab-general" aria-controls="panel-general">General</button>
+  </nav>
+
+  <main>
+    <form id="config" autocomplete="off">
+
+      <section class="panel" id="panel-overlay" role="tabpanel" aria-labelledby="tab-overlay">
+        <p class="intro">The overlay window itself. Changes here apply instantly, no need to save.</p>
+        <div class="row">
+          <div class="label">Show overlay<small id="hint-toggleVisible"></small></div>
+          <label class="switch"><input type="checkbox" id="ovVisible" aria-label="Show overlay"><span></span></label>
+        </div>
+        <div class="row">
+          <div class="label">Position &amp; size<small>Drag the overlay to move it. Arrow keys resize, Esc finishes.</small></div>
+          <button type="button" id="ovEdit" class="btn">Move / resize</button>
+        </div>
+        <div class="row">
+          <div class="label">Opacity<small id="hint-cycleOpacity"></small></div>
+          <div class="segmented" id="ovOpacity" role="group" aria-label="Opacity">
+            <button type="button" data-v="1">100%</button>
+            <button type="button" data-v="0.7">70%</button>
+            <button type="button" data-v="0.45">45%</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Scale<small>Messages, emotes and spacing</small></div>
+          <div class="range">
+            <input type="range" id="ovZoom" min="50" max="200" step="10" aria-label="Scale">
+            <output id="ovZoomOut">100%</output>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Can't find it?<small id="hint-editMode"></small></div>
+          <button type="button" id="ovReset" class="btn ghost">Reset position</button>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden>
+        <p class="intro">Where the messages come from. Twitch is read anonymously, so no login is needed.</p>
+        <label class="field">
+          <span>Twitch channel</span>
+          <input type="text" id="twitchChannel" placeholder="yourname" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Streamlabs chat widget URL <em>optional</em></span>
+          <input type="url" id="widgetUrl" placeholder="https://streamlabs.com/widgets/chat-box/..." spellcheck="false">
+          <small>For YouTube, Kick and others: Streamlabs dashboard &rarr; All Widgets &rarr; Chat Box &rarr; copy the widget URL. Keep it private.</small>
+          <small id="widgetNote" class="note hidden">The widget URL is set, so the Twitch channel above is ignored.</small>
+        </label>
+      </section>
+
+      <section class="panel" id="panel-appearance" role="tabpanel" aria-labelledby="tab-appearance" hidden>
+        <p class="intro">How messages look on the overlay.</p>
+        <div class="row">
+          <div class="label">Text size</div>
+          <div class="num"><input type="number" id="fontSize" min="8" max="48" step="1"><span>px</span></div>
+        </div>
+        <div class="row">
+          <div class="label">Message background<small>Dark backing behind each message</small></div>
+          <div class="range">
+            <input type="range" id="messageBackgroundOpacity" min="0" max="100" step="5" aria-label="Message background">
+            <output id="bgOut"></output>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Fade messages after<small>0 = never fade</small></div>
+          <div class="num"><input type="number" id="fadeAfterSeconds" min="0" max="600" step="1"><span>sec</span></div>
+        </div>
+        <div class="row">
+          <div class="label">Max messages on screen</div>
+          <div class="num"><input type="number" id="maxMessages" min="1" max="50" step="1"><span></span></div>
+        </div>
+        <div class="row">
+          <div class="label">Show emotes<small>Twitch emotes</small></div>
+          <label class="switch"><input type="checkbox" id="showEmotes" aria-label="Show emotes"><span></span></label>
+        </div>
+        <div class="row">
+          <div class="label">Show subs, gifts &amp; raids</div>
+          <label class="switch"><input type="checkbox" id="showSubsAndRaids" aria-label="Show subs, gifts and raids"><span></span></label>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-filters" role="tabpanel" aria-labelledby="tab-filters" hidden>
+        <p class="intro">What gets left out, and what stands out.</p>
+        <div class="row">
+          <div class="label">Hide !commands</div>
+          <label class="switch"><input type="checkbox" id="hideCommands" aria-label="Hide commands"><span></span></label>
+        </div>
+        <label class="field">
+          <span>Ignored users</span>
+          <textarea id="ignoreUsers" rows="3" spellcheck="false"></textarea>
+          <small>Login names, separated by commas.</small>
+        </label>
+        <label class="field">
+          <span>Highlight words</span>
+          <textarea id="highlightWords" rows="3" spellcheck="false"></textarea>
+          <small>Separated by commas. Messages with your channel name are always highlighted.</small>
+        </label>
+      </section>
+
+      <section class="panel" id="panel-hotkeys" role="tabpanel" aria-labelledby="tab-hotkeys" hidden>
+        <p id="hotkeyHelp" class="intro">Click a hotkey, then press the new combo. Backspace clears it, Esc cancels.</p>
+        <div class="row">
+          <div class="label">Show / hide overlay</div>
+          <button type="button" class="btn hotkey" data-hotkey="toggleVisible"></button>
+        </div>
+        <div class="row">
+          <div class="label">Move / resize mode</div>
+          <button type="button" class="btn hotkey" data-hotkey="editMode"></button>
+        </div>
+        <div class="row">
+          <div class="label">Cycle opacity</div>
+          <button type="button" class="btn hotkey" data-hotkey="cycleOpacity"></button>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-general" role="tabpanel" aria-labelledby="tab-general" hidden>
+        <p class="intro">Privacy and startup.</p>
+        <div class="row">
+          <div class="label">Hide from stream &amp; screenshots<small>Also hides this window from capture</small></div>
+          <label class="switch"><input type="checkbox" id="hideFromCapture" aria-label="Hide from stream and screenshots"><span></span></label>
+        </div>
+        <p id="captureWarning" class="warn hidden">Off: if Streamlabs uses display capture, the overlay and this window will show up on stream.</p>
+        <div class="row">
+          <div class="label">Launch when Windows starts<small id="startupHint">Starts quietly in the tray</small></div>
+          <label class="switch"><input type="checkbox" id="launchAtStartup" aria-label="Launch when Windows starts"><span></span></label>
+        </div>
+        <div class="row">
+          <div class="label">Start minimized to tray<small>When opened from the Start menu or desktop</small></div>
+          <label class="switch"><input type="checkbox" id="startMinimized" aria-label="Start minimized to tray"><span></span></label>
+        </div>
+      </section>
+
+    </form>
+  </main>
+
+  <footer>
+    <span id="saveState" role="status">All changes saved</span>
+    <button type="button" id="revert" class="btn ghost" disabled>Revert</button>
+    <button type="button" id="save" class="btn primary" disabled>Save</button>
+  </footer>
+
+  <script src="settings.js"></script>
+</body>
+</html>

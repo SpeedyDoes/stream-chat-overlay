@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b197fc"/>
+      <stop offset="0.5" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#4c1d95"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.24"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bubble" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ece6ff"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#tile)"/>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#shine)"/>
+  <rect x="9" y="9" width="238" height="238" rx="55" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2"/>
+
+  <!-- chat bubble -->
+  <path d="M78 58H178A30 30 0 0 1 208 88V150A30 30 0 0 1 178 180H114L82 206C77 210 70 206 72 200L78 180A30 30 0 0 1 48 150V88A30 30 0 0 1 78 58Z"
+        fill="url(#bubble)"/>
+
+  <!-- chat lines: older ones fade out, like messages on the overlay -->
+  <rect x="74" y="84" width="84" height="16" rx="8" fill="#6d28d9" opacity="0.28"/>
+  <rect x="74" y="111" width="108" height="16" rx="8" fill="#6d28d9" opacity="0.6"/>
+  <rect x="74" y="138" width="64" height="16" rx="8" fill="#6d28d9"/>
+</svg>

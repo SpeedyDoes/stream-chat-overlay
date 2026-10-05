@@ -1,0 +1,62 @@
+{
+  "name": "stream-chat-overlay",
+  "productName": "Stream Chat Overlay",
+  "version": "1.0.0",
+  "description": "Private, click-through, always-on-top stream chat overlay that is hidden from screen capture.",
+  "author": "SpeedyDoes",
+  "license": "MIT",
+  "homepage": "https://github.com/SpeedyDoes/stream-chat-overlay",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SpeedyDoes/stream-chat-overlay.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SpeedyDoes/stream-chat-overlay/issues"
+  },
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "icons": "electron scripts/build-icons.js",
+    "dist": "electron-builder --win nsis && node -e \"for (const p of ['dist/win-unpacked', 'dist/builder-debug.yml']) require('fs').rmSync(p, { recursive: true, force: true })\""
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.speedydoes.streamchatoverlay",
+    "productName": "Stream Chat Overlay",
+    "copyright": "SpeedyDoes",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "settings-preload.js",
+      "overlay.html",
+      "overlay.css",
+      "overlay.js",
+      "settings.html",
+      "settings.css",
+      "settings.js",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Stream Chat Overlay",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Stream-Chat-Overlay-Setup-${version}.${ext}"
+    }
+  }
+}

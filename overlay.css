@@ -1,0 +1,62 @@
+:root {
+  --font-size: 15px;
+  --msg-bg: rgba(0, 0, 0, 0.45);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: var(--font-size);
+  color: #eeeeee;
+  user-select: none;
+}
+
+/* Newest message sits at the bottom; older ones scroll off the top and get clipped. */
+#chat {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.msg {
+  flex-shrink: 0;
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--msg-bg);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  transition: opacity 1.2s ease;
+}
+
+.msg.faded { opacity: 0; }
+body.editing .msg.faded { opacity: 0.6; }
+
+.name { font-weight: 700; }
+.msg.action .text { font-style: italic; }
+
+.msg.mention { box-shadow: inset 3px 0 0 #f5c542; }
+.msg.event { background: rgba(109, 40, 217, 0.6); }
+.msg.event .reply { display: block; opacity: 0.85; }
+.msg.system { color: #bdbdbd; font-size: 0.85em; font-style: italic; }
+
+.emote {
+  height: 1.5em;
+  margin: -0.25em 0;
+  vertical-align: middle;
+}
