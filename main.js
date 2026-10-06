@@ -4,9 +4,10 @@
 // anti-cheat friendly. It is click-through, never takes focus, and is excluded from capture.
 // A normal settings window controls it; minimizing that hides to the tray, closing it quits.
 
-const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeTheme, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeTheme, screen, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { createFaceitTracker } = require('./faceit');
 
 // Must match "build.appId" in package.json; the installer's shortcuts use it too.
 const APP_ID = 'com.speedydoes.streamchatoverlay';
@@ -37,12 +38,19 @@ const DEFAULT_CONFIG = {
   hideFromCapture: true,
   startMinimized: false,
   launchAtStartup: false,
+  faceitNickname: '',
+  faceitLayout: 'bar',
+  faceitSessionResetHours: 6,
+  faceitPort: 4545,
   hotkeys: {
     toggleVisible: 'Control+Shift+F8',
     editMode: 'Control+Shift+F9',
     cycleOpacity: 'Control+Shift+F10',
+    resetSession: 'Control+Shift+F11',
   },
 };
+
+const FACEIT_LAYOUTS = ['bar', 'card'];
 
 const OPACITY_STEPS = [1, 0.7, 0.45];
 const MIN_W = 160;
@@ -78,6 +86,7 @@ let registeredHotkeys = [];
 let failedHotkeys = [];
 let quitting = false;
 let trayHintShown = false;
+let faceit;
 
 // ---------- config & state ----------
 
@@ -118,6 +127,10 @@ function sanitizeConfig(input = {}) {
     hideFromCapture: bool('hideFromCapture'),
     startMinimized: bool('startMinimized'),
     launchAtStartup: bool('launchAtStartup'),
+    faceitNickname: String(input.faceitNickname ?? d.faceitNickname).trim(),
+    faceitLayout: FACEIT_LAYOUTS.includes(input.faceitLayout) ? input.faceitLayout : d.faceitLayout,
+    faceitSessionResetHours: clampNumber(input.faceitSessionResetHours, 0, 72, d.faceitSessionResetHours),
+    faceitPort: Math.round(clampNumber(input.faceitPort, 1024, 65535, d.faceitPort)),
     hotkeys,
   };
 }
@@ -171,10 +184,14 @@ function loadState() {
   }
 }
 
+function writeState() {
+  fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
+}
+
 function saveState() {
   if (!overlayWin || overlayWin.isDestroyed()) return;
   state.bounds = overlayWin.getBounds();
-  fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
+  writeState();
 }
 
 function isWidgetMode() {
@@ -206,6 +223,10 @@ function overlayState() {
 function pushState() {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('overlay:state', overlayState());
   updateTray();
+}
+
+function pushFaceit() {
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('faceit:state', faceit.state());
 }
 
 function setStatus(kind, text) {
@@ -382,6 +403,7 @@ function registerHotkeys() {
     toggleVisible: () => setVisible(!overlayVisible),
     editMode: () => setEditing(!editing),
     cycleOpacity,
+    resetSession: () => faceit.resetSession(),
   };
   const failed = [];
   for (const [name, handler] of Object.entries(actions)) {
@@ -483,6 +505,12 @@ function updateTray() {
     },
     { label: 'Reset position', click: resetPosition },
     { type: 'separator' },
+    {
+      label: `Reset FACEIT session${hotkeyHint(config.hotkeys.resetSession)}`,
+      enabled: Boolean(config.faceitNickname),
+      click: () => faceit.resetSession(),
+    },
+    { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]));
 }
@@ -500,7 +528,7 @@ function registerIpc() {
 
   ipcMain.handle('settings:load', (event) => {
     if (!fromSettings(event)) return null;
-    return { config, configError, failedHotkeys, overlay: overlayState(), installed: app.isPackaged };
+    return { config, configError, failedHotkeys, overlay: overlayState(), faceit: faceit.state(), installed: app.isPackaged };
   });
 
   ipcMain.handle('settings:save', (event, input) => {
@@ -512,7 +540,18 @@ function registerIpc() {
     failedHotkeys = registerHotkeys();
     settingsWin.setContentProtection(config.hideFromCapture);
     recreateOverlay();
+    faceit.configure(config);
     return { config, failedHotkeys };
+  });
+
+  ipcMain.handle('faceit:reset', (event) => {
+    if (fromSettings(event)) faceit.resetSession();
+  });
+  ipcMain.handle('faceit:gsi', (event, action) => {
+    if (!fromSettings(event)) return null;
+    if (action === 'install') return faceit.installGsi();
+    if (action === 'remove') faceit.removeGsi();
+    return null;
   });
 
   ipcMain.handle('overlay:control', (event, action, value) => {
@@ -560,6 +599,27 @@ if (!app.requestSingleInstanceLock()) {
     createOverlay();
     failedHotkeys = registerHotkeys();
 
+    faceit = createFaceitTracker({
+      appDir: __dirname,
+      store: {
+        get: (key) => state[key] ?? null,
+        set: (key, value) => {
+          state[key] = value;
+          writeState();
+        },
+      },
+      // Only asked when CS2 can't be found automatically.
+      pickFolder: async () => {
+        const result = await dialog.showOpenDialog(settingsWin, {
+          title: 'Find your Counter-Strike Global Offensive folder',
+          properties: ['openDirectory'],
+        });
+        return result.canceled ? null : result.filePaths[0];
+      },
+      onStatus: pushFaceit,
+    });
+    faceit.configure(config);
+
     const quiet = config.startMinimized || process.argv.includes(STARTUP_ARG);
     const needsSetup = !config.twitchChannel && !isWidgetMode();
     createSettings(!quiet || needsSetup || Boolean(configError) || failedHotkeys.length > 0);
@@ -569,5 +629,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     quitting = true;
   });
-  app.on('will-quit', () => globalShortcut.unregisterAll());
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+    if (faceit) faceit.stop();
+  });
 }

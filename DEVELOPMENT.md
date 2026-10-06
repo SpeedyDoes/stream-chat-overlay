@@ -28,6 +28,9 @@ preload.js            Bridge for the overlay window   (window.overlay)
 overlay.html/.css/.js Overlay page: Twitch chat client + message rendering
 settings-preload.js   Bridge for the settings window  (window.settings)
 settings.html/.css/.js Settings page: tabs, form, hotkey recorder, live overlay controls
+faceit.js             FACEIT tracker (main process): Elo polling, sessions, local web server
+gsi.js                CS2 Game State Integration: find CS2, write the cfg, follow matches
+faceit-overlay.html/.css/.js  Browser Source page for Streamlabs/OBS, served by faceit.js
 assets/               icon.svg (large), icon-small.svg (16 px), generated icon.ico + PNGs
 scripts/build-icons.js Renders the SVGs to PNG/ICO using a hidden Electron window
 start-overlay.bat     Double-click launcher for running from source
@@ -80,6 +83,28 @@ These options are what make the overlay usable over a game and safe with anti-ch
 | `app.disableHardwareAcceleration()` | A few lines of text don't need the GPU, so the game gets all of it. |
 | Never touch the game process | No injection, memory reads, DirectX hooks, drivers or input simulation. That's the whole anti-cheat story. For game data, only use CS2's official Game State Integration. |
 
+### FACEIT stats (`faceit.js`, `gsi.js`)
+
+Unlike the chat overlay, this is **meant to be on stream**. It's not a window: `faceit.js` runs a tiny HTTP server, and Streamlabs/OBS loads its page as a Browser Source. No FACEIT API key is used; FACEIT's developer portal needs company and identity verification.
+
+```
+faceit.com/api/users/v1/nicknames/<nick>  <-- poll 60 s (15 s after a match) --+
+                                                                               |
+CS2 (gamestate_integration_streamchatoverlay.cfg) -- POST /gsi --> faceit.js (main process) -- /faceit, /faceit/data --> Browser Source
+                                                                   session + history in state.json                       polls every 5 s
+```
+
+- **Elo and level:** `GET https://www.faceit.com/api/users/v1/nicknames/<nick>` is the unauthenticated endpoint faceit.com uses for profiles. It returns `{ payload: { id, nickname, games: { cs2: { faceit_elo, skill_level } } } }`, and 404 for an unknown nickname. It's undocumented, so expect it to change. faceit.com's match-history/stats endpoints sit behind a Cloudflare bot block: **don't try to get around that.**
+- **Wins/losses:** every change of `faceit_elo` between polls is one finished FACEIT match (`recordMatch`), up = win. Matches with a 0 Elo change are invisible.
+- **K/D, ADR (gsi.js):** `createGameTracker` follows one match from GSI posts. It only uses `player` when `player.steamid === provider.steamid` (while you're dead, CS2 sends the player you spectate). Kills/deaths come from `player.match_stats`. Damage is `player.state.round_totaldmg`, summed whenever it drops (new round). Rounds are `team_ct.score + team_t.score`. `map.phase === 'gameover'` (or leaving to the menu mid-match) reports a finished game.
+- **Linking the two:** a finished game waits in `finishedGames` until the next Elo change takes it (`LINK_WINDOW_MS`, 15 min). If the Elo changes first, the game fills in that match's stats when it ends. Waiting games and the live match count towards K/D on the page (`provisional`), so K/D doesn't jump while FACEIT catches up. A game with no Elo change (Premier, DM) drops out after the window.
+- **GSI setup:** `findCfgDir()` reads `SteamPath` from `HKCU\Software\Valve\Steam`, then `steamapps/libraryfolders.vdf` for libraries containing app 730. If that fails, the settings window asks for the folder (`cfgDirFromPick` accepts the CS2 folder, `game/csgo` or `cfg`, and checks for `gameinfo.gi`). The cfg holds a random token (`faceitGsi.token` in state.json); posts without it are ignored. The cfg also holds the port, so `configure()` rewrites it when the port changes. CS2 only reads cfgs at startup.
+- **State:** `faceitSession` = `{ playerId, startedAt, startElo, lastElo, lastActivityAt, matches[] }`, `faceitHistory` = the last 20 matches across sessions (for Last 5 and the streak), `faceitGsi` = `{ token, cfgPath }`. A new session starts when the stored one is for another player, or when `lastActivityAt` is older than `faceitSessionResetHours`.
+- **The server** listens on `127.0.0.1` only. It serves a fixed whitelist (`STATIC`), `/faceit/data` and `POST /gsi`, and nothing else. It's stopped when the nickname is empty, and restarted when the port changes. `EADDRINUSE` is shown as a status error.
+- `generation` makes sure a poll that finishes after a config change or reset is dropped.
+- **Layout:** `faceitLayout` in config (`bar`/`card`), overridable per source with `?layout=`.
+- **Testing:** require `faceit.js` from a plain Node script after replacing `globalThis.fetch` with a fake profile endpoint. Then POST GSI payloads (`provider`, `map`, `player`, `auth.token`) to `/gsi` to play a match. Don't call `installGsi()` in tests: it writes into the real CS2 folder.
+
 ### Edit mode (move/resize)
 
 - `setEditing(true)` makes the overlay accept the mouse and injects `EDIT_CSS` with `webContents.insertCSS`. That adds the dashed border, the banner and `-webkit-app-region: drag`. Because it's injected CSS, it also works in widget mode, where we don't control the page.
@@ -101,11 +126,14 @@ Every handler checks the sender (`fromSettings` / `fromOverlay`), so neither pag
 | `overlay:config` | overlay → main (invoke) | Get the current config |
 | `overlay:status` | overlay → main | Connection status (`ok` / `pending` / `error` / `off`), shown in the settings header and tray tooltip |
 | `edit-mode` | main → overlay | Show faded messages while editing |
-| `settings:load` | settings → main (invoke) | `{ config, configError, failedHotkeys, overlay, installed }` |
+| `settings:load` | settings → main (invoke) | `{ config, configError, failedHotkeys, overlay, faceit, installed }` |
 | `settings:save` | settings → main (invoke) | Sanitize, write, re-register hotkeys, update the login item, **recreate the overlay** |
 | `overlay:control` | settings → main (invoke) | Instant actions: `visible`, `editing`, `opacity`, `zoom`, `reset` |
 | `hotkeys:suspend` | settings → main | Pause/resume global hotkeys while recording |
 | `overlay:state` | main → settings | Push `{ visible, editing, opacity, zoom, status }` whenever it changes |
+| `faceit:reset` | settings → main (invoke) | Start a new FACEIT session now |
+| `faceit:state` | main → settings | Push `{ status, url, gsi, session }` for the FACEIT tab |
+| `faceit:gsi` | settings → main (invoke) | `install` (find CS2 or ask for the folder, write the cfg) or `remove` |
 
 Saving **recreates** the overlay window instead of updating it in place. The overlay mode and its preload are fixed when the window is created, and recreating it is simpler and more reliable than patching live state. The new window is created before the old one is destroyed, so the app never has zero windows.
 
@@ -134,8 +162,8 @@ Everything lives in `%APPDATA%\Stream Chat Overlay\`, which is `app.getPath('use
 
 | File | Contents | Written when |
 |---|---|---|
-| `config.json` | Everything on the Chat, Appearance, Filters, Hotkeys and General tabs | Save in the settings window |
-| `state.json` | Overlay `bounds`, `opacity`, `zoom` | Move, resize, opacity or scale changes |
+| `config.json` | Everything on the Chat, Appearance, Filters, FACEIT, Hotkeys and General tabs | Save in the settings window |
+| `state.json` | Overlay `bounds`, `opacity`, `zoom`; `faceitSession`, `faceitHistory`, `faceitGsi` | Move, resize, opacity or scale changes; FACEIT session start/reset and new matches |
 | Chromium folders (`Cache`, `Local Storage`, …) | Electron's own data. Local Storage remembers the last open settings tab | Automatically |
 
 - **Config is sanitized on every load and save** (`sanitizeConfig`). Unknown keys are dropped, numbers are clamped, and bad values fall back to defaults. If `config.json` can't be parsed, the app runs with defaults and the settings window shows the error.
@@ -209,6 +237,10 @@ How the installer behaves (`build.nsis` in `package.json`):
 There are no automated tests. Run through this list before a release:
 
 - [ ] Overlay connects; the settings header shows "Connected to #channel"; messages and emotes show up
+- [ ] FACEIT tab: status turns green with level and Elo; a wrong nickname shows a clear error
+- [ ] CS2 match stats: Set up writes the cfg; after restarting CS2 the tab shows "Receiving data"; Remove deletes it
+- [ ] The Browser Source URL shows the panel in Streamlabs (bar and card); K/D shows LIVE in a match; W/L and Elo update within a minute after it
+- [ ] Reset session (button, tray, Ctrl+Shift+F11) zeroes the session numbers; restarting the app keeps the session
 - [ ] Messages fade after the configured time; deleted and banned messages disappear
 - [ ] Ctrl+Shift+F8 / F9 / F10 work, including over CS2 in *Fullscreen Windowed*
 - [ ] Edit mode: drag, arrows, Shift+arrows, `+`/`-`/`0`, Esc. Afterwards, arrows work normally in other apps

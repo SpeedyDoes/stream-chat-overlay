@@ -1,7 +1,7 @@
 {
   "name": "stream-chat-overlay",
   "productName": "Stream Chat Overlay",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Private, click-through, always-on-top stream chat overlay that is hidden from screen capture.",
   "author": "SpeedyDoes",
   "license": "MIT",
@@ -41,6 +41,11 @@
       "settings.html",
       "settings.css",
       "settings.js",
+      "faceit.js",
+      "gsi.js",
+      "faceit-overlay.html",
+      "faceit-overlay.css",
+      "faceit-overlay.js",
       "assets/**/*",
       "package.json"
     ],

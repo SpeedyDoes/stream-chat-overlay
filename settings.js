@@ -3,11 +3,16 @@
 const api = window.settings;
 const $ = (id) => document.getElementById(id);
 
-const TEXT = ['twitchChannel', 'widgetUrl'];
-const NUMBERS = ['fontSize', 'fadeAfterSeconds', 'maxMessages'];
+const TEXT = ['twitchChannel', 'widgetUrl', 'faceitNickname', 'faceitLayout'];
+const NUMBERS = ['fontSize', 'fadeAfterSeconds', 'maxMessages', 'faceitSessionResetHours', 'faceitPort'];
 const SWITCHES = ['showEmotes', 'showSubsAndRaids', 'hideCommands', 'hideFromCapture', 'launchAtStartup', 'startMinimized'];
 const LISTS = ['ignoreUsers', 'highlightWords'];
-const HOTKEYS = { toggleVisible: 'Show / hide', editMode: 'Move / resize', cycleOpacity: 'Cycle opacity' };
+const HOTKEYS = {
+  toggleVisible: 'Show / hide',
+  editMode: 'Move / resize',
+  cycleOpacity: 'Cycle opacity',
+  resetSession: 'Reset FACEIT session',
+};
 const HOTKEY_HELP = 'Click a hotkey, then press the new combo. Backspace clears it, Esc cancels.';
 
 let saved = null;
@@ -268,6 +273,75 @@ $('ovZoom').addEventListener('input', (e) => {
   api.overlay('zoom', Number(e.target.value) / 100);
 });
 
+// ---------- FACEIT ----------
+
+const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '±0');
+
+function applyFaceitState(next) {
+  $('faceitStatus').className = `status ${next.status.kind}`;
+  $('faceitStatusText').textContent = next.status.text;
+  $('faceitUrl').value = next.url;
+  const s = next.session;
+  if (s) {
+    const since = new Date(s.startedAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    const kd = s.kd === null ? '-' : s.kd.toFixed(2);
+    $('faceitSession').textContent = `Since ${since} · ${signed(s.eloChange)} Elo · ${s.wins}W ${s.losses}L · K/D ${kd}`;
+  } else {
+    $('faceitSession').textContent = 'No session yet';
+  }
+  $('faceitReset').disabled = next.status.kind === 'off';
+  showGsi(next.gsi, next.status.kind === 'off');
+}
+
+let gsiError = null;
+
+function showGsi(gsi, off) {
+  const text = $('gsiText');
+  text.className = '';
+  if (gsiError) {
+    text.textContent = gsiError;
+    text.className = 'bad';
+  } else if (!gsi.installed) {
+    text.textContent = "Not set up, so K/D and ADR show “-”. Uses CS2's official Game State Integration.";
+  } else if (gsi.receiving) {
+    text.textContent = gsi.inMatch ? 'Receiving data from CS2 · in a match' : 'Receiving data from CS2';
+    text.className = 'good';
+  } else {
+    text.textContent = "Installed. Restart CS2 once if it's open, so it picks this up.";
+  }
+  // Full path on hover; the row shows just enough to recognise the folder.
+  const parts = gsi.installed ? gsi.path.split(/[\\/]/) : [];
+  $('gsiPath').textContent = parts.length > 5 ? `In ...\\${parts.slice(-5, -1).join('\\')}` : gsi.path || '';
+  $('gsiPath').title = gsi.installed ? gsi.path : '';
+  $('gsiInstall').textContent = gsi.installed ? 'Reinstall' : 'Set up';
+  $('gsiInstall').disabled = off;
+  $('gsiRemove').classList.toggle('hidden', !gsi.installed);
+}
+
+$('gsiInstall').addEventListener('click', async () => {
+  $('gsiInstall').disabled = true;
+  const result = await api.faceitGsi('install');
+  gsiError = result && !result.ok ? result.error : null;
+  applyFaceitState(await api.load().then((d) => d.faceit));
+});
+$('gsiRemove').addEventListener('click', async () => {
+  gsiError = null;
+  await api.faceitGsi('remove');
+  applyFaceitState(await api.load().then((d) => d.faceit));
+});
+
+$('faceitReset').addEventListener('click', () => api.resetFaceitSession());
+$('faceitCopy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('faceitUrl').value);
+    $('faceitCopy').textContent = 'Copied';
+  } catch {
+    $('faceitUrl').select();
+    $('faceitCopy').textContent = 'Press Ctrl+C';
+  }
+  setTimeout(() => { $('faceitCopy').textContent = 'Copy'; }, 2000);
+});
+
 // ---------- wiring ----------
 
 $('config').addEventListener('input', refresh);
@@ -308,6 +382,8 @@ selectTab(initialTab());
   fill(data.config);
   applyOverlayState(data.overlay);
   api.onOverlayState(applyOverlayState);
+  applyFaceitState(data.faceit);
+  api.onFaceitState(applyFaceitState);
 
   if (data.configError) {
     setNotice('error', `config.json couldn't be read (${data.configError}). Showing defaults; Save overwrites it.`);

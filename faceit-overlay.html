@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>FACEIT Stats</title>
+  <link rel="stylesheet" href="/faceit/overlay.css">
+</head>
+<body>
+  <div id="root" hidden>
+    <div class="player">
+      <svg class="badge" viewBox="0 0 48 48" aria-hidden="true">
+        <circle class="track" cx="24" cy="24" r="20"></circle>
+        <circle class="ring" id="ring" cx="24" cy="24" r="20" pathLength="100"></circle>
+        <text id="level" x="24" y="25"></text>
+      </svg>
+      <div class="ident">
+        <div class="name" id="nickname"></div>
+        <div class="elo"><span id="elo"></span><small>ELO</small></div>
+        <div class="next" id="next"></div>
+      </div>
+    </div>
+
+    <div class="session">
+      <div class="label">Session <span class="live" id="live" hidden>Live</span></div>
+      <div class="stats">
+        <div class="stat"><b id="eloChange"></b><span>Elo</span></div>
+        <div class="stat"><b id="record"></b><span>W / L</span></div>
+        <div class="stat"><b id="kd"></b><span>K/D</span></div>
+        <div class="stat card-only"><b id="adr"></b><span>ADR</span></div>
+      </div>
+    </div>
+
+    <div class="recent" id="recentBox">
+      <div class="label">Last 5 <span id="streak"></span></div>
+      <div class="chips" id="chips"></div>
+    </div>
+  </div>
+  <script src="/faceit/overlay.js"></script>
+</body>
+</html>

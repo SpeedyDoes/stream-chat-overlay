@@ -23,6 +23,7 @@
     <button type="button" role="tab" id="tab-chat" aria-controls="panel-chat">Chat</button>
     <button type="button" role="tab" id="tab-appearance" aria-controls="panel-appearance">Appearance</button>
     <button type="button" role="tab" id="tab-filters" aria-controls="panel-filters">Filters</button>
+    <button type="button" role="tab" id="tab-faceit" aria-controls="panel-faceit">FACEIT</button>
     <button type="button" role="tab" id="tab-hotkeys" aria-controls="panel-hotkeys">Hotkeys</button>
     <button type="button" role="tab" id="tab-general" aria-controls="panel-general">General</button>
   </nav>
@@ -124,6 +125,54 @@
         </label>
       </section>
 
+      <section class="panel" id="panel-faceit" role="tabpanel" aria-labelledby="tab-faceit" hidden>
+        <p class="intro">Your FACEIT level, Elo and this session's Elo, wins/losses and K/D, <strong>shown on stream</strong> through a Browser Source in Streamlabs. No FACEIT account setup needed.</p>
+        <div class="row">
+          <div class="label">Status</div>
+          <div id="faceitStatus" class="status off" role="status">
+            <span class="dot"></span><span id="faceitStatusText">Not set up</span>
+          </div>
+        </div>
+        <label class="field">
+          <span>FACEIT nickname</span>
+          <input type="text" id="faceitNickname" placeholder="YourName" spellcheck="false">
+        </label>
+        <div class="row">
+          <div class="label">CS2 match stats<small id="gsiText">For K/D and ADR. Uses CS2's official Game State Integration.</small><small id="gsiPath" class="path"></small></div>
+          <div class="buttons">
+            <button type="button" id="gsiRemove" class="btn ghost hidden">Remove</button>
+            <button type="button" id="gsiInstall" class="btn">Set up</button>
+          </div>
+        </div>
+        <div class="field">
+          <span>Browser Source URL</span>
+          <div class="copy">
+            <input type="text" id="faceitUrl" readonly aria-label="Browser Source URL">
+            <button type="button" id="faceitCopy" class="btn">Copy</button>
+          </div>
+          <small>In Streamlabs: <b>+</b> (add source) &rarr; <b>Browser Source</b> &rarr; paste this URL. Size: bar 680 &times; 80, card 320 &times; 260. The app has to be running.</small>
+        </div>
+        <div class="row">
+          <div class="label">Layout<small>Add <code>?layout=card</code> to the URL to override it per source</small></div>
+          <select id="faceitLayout" aria-label="Layout">
+            <option value="bar">Bar</option>
+            <option value="card">Card</option>
+          </select>
+        </div>
+        <div class="row">
+          <div class="label">This session<small id="faceitSession">No session yet</small><small id="hint-resetSession"></small></div>
+          <button type="button" id="faceitReset" class="btn">Reset session</button>
+        </div>
+        <div class="row">
+          <div class="label">New session after<small>Hours without a match. 0 = only when you reset it</small></div>
+          <div class="num"><input type="number" id="faceitSessionResetHours" min="0" max="72" step="1"><span>hrs</span></div>
+        </div>
+        <div class="row">
+          <div class="label">Local port<small>Change it only if another app already uses this port</small></div>
+          <div class="num"><input type="number" id="faceitPort" min="1024" max="65535" step="1"><span></span></div>
+        </div>
+      </section>
+
       <section class="panel" id="panel-hotkeys" role="tabpanel" aria-labelledby="tab-hotkeys" hidden>
         <p id="hotkeyHelp" class="intro">Click a hotkey, then press the new combo. Backspace clears it, Esc cancels.</p>
         <div class="row">
@@ -137,6 +186,10 @@
         <div class="row">
           <div class="label">Cycle opacity</div>
           <button type="button" class="btn hotkey" data-hotkey="cycleOpacity"></button>
+        </div>
+        <div class="row">
+          <div class="label">Reset FACEIT session</div>
+          <button type="button" class="btn hotkey" data-hotkey="resetSession"></button>
         </div>
       </section>
 

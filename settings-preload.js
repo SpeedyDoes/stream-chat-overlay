@@ -7,4 +7,7 @@ contextBridge.exposeInMainWorld('settings', {
   overlay: (action, value) => ipcRenderer.invoke('overlay:control', action, value),
   suspendHotkeys: (on) => ipcRenderer.send('hotkeys:suspend', on),
   onOverlayState: (callback) => ipcRenderer.on('overlay:state', (_event, state) => callback(state)),
+  resetFaceitSession: () => ipcRenderer.invoke('faceit:reset'),
+  faceitGsi: (action) => ipcRenderer.invoke('faceit:gsi', action),
+  onFaceitState: (callback) => ipcRenderer.on('faceit:state', (_event, state) => callback(state)),
 });
