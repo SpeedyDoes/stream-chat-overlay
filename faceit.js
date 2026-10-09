@@ -2,9 +2,9 @@
 // FACEIT stats for the stream, without a FACEIT API key:
 //  - Elo and level come from the public profile endpoint faceit.com uses for its own pages.
 //  - A FACEIT match finished whenever that Elo changes: up is a win, down is a loss.
-//  - Kills, deaths and damage come from CS2's Game State Integration (see gsi.js). A finished
-//    CS2 game only counts once FACEIT moves your Elo right after it, which leaves out Premier,
-//    deathmatch and the rest.
+//  - Kills, deaths and damage come from CS2's Game State Integration (see gsi.js). Only competitive
+//    games on regular maps are tracked, so deathmatch, casual and community servers never count. A
+//    finished game only counts once FACEIT moves your Elo right after it, which leaves out Premier.
 // It serves a page on http://127.0.0.1:<port>/faceit that Streamlabs/OBS loads as a Browser Source,
 // and takes CS2's GSI updates on /gsi. Unlike the chat overlay, this page is meant to be on stream.
 // Nothing here reads or touches the game, or the FACEIT client.

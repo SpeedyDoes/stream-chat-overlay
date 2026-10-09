@@ -76,7 +76,7 @@ Pick **Bar** or **Card** under **Layout**. To use both in different scenes, add 
 
 - **Elo and level** come from the public profile FACEIT's own website loads. The app checks once a minute, and every 15 seconds right after a CS2 match ends.
 - **Wins and losses** come from Elo changes. Each time your Elo moves, a FACEIT match just ended: up is a win, down is a loss.
-- **K/D and ADR** come from CS2. A finished CS2 match only counts when your FACEIT Elo changes right after it, so Premier, deathmatch and other non-FACEIT games are left out. During a match it counts live (shown as **LIVE**). If no Elo change follows within 15 minutes, that match drops out again.
+- **K/D and ADR** come from CS2. Only competitive matches are tracked: deathmatch, casual, arms race, wingman and community/workshop servers (aim maps, headshot DM, ...) are ignored, so you can warm up between matches. A finished match only counts when your FACEIT Elo changes right after it, so Premier is left out too. During a match it counts live (shown as **LIVE**). If no Elo change follows within 15 minutes, that match drops out again.
 - A session starts at your Elo when the app first loads your stats. Elo +/- is your current Elo minus that number.
 - **A new session starts automatically** after 6 hours without a match (change this under **New session after**; 0 turns it off). Restarting the app or Streamlabs mid-stream keeps the session.
 - **Reset it yourself** with **Reset session** in the FACEIT tab, the tray menu, or **Ctrl+Shift+F11**.

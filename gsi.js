@@ -94,6 +94,13 @@ function removeConfig(file) {
 
 // ---------- reading the data ----------
 
+// FACEIT matches are 5v5 competitive on a regular map. Deathmatch, casual, arms race, wingman and
+// community/workshop maps (aim maps, headshot DM) are ignored entirely, so warming up
+// between matches never touches K/D or ADR.
+function isMatch(map) {
+  return map.mode === 'competitive' && /^(de|cs)_/.test(String(map.name || ''));
+}
+
 // Follows one match at a time from the updates CS2 sends. Only your own stats count: while you're
 // dead CS2 sends whoever you're spectating, so `player` is ignored unless it's the local player.
 function createGameTracker({ onGameOver }) {
@@ -123,8 +130,8 @@ function createGameTracker({ onGameOver }) {
   function update(p) {
     lastSeen = Date.now();
     const map = p.map;
-    if (!map) {
-      // Back in the menu. A match left before the end still gets reported so its stats count.
+    if (!map || !isMatch(map)) {
+      // Back in the menu or warming up. A match left before the end still gets reported so its stats count.
       if (game && !game.over && game.rounds > 0) finish(null);
       game = null;
       return;
