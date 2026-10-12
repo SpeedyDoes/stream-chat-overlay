@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('settings', {
   resetFaceitSession: () => ipcRenderer.invoke('faceit:reset'),
   faceitGsi: (action) => ipcRenderer.invoke('faceit:gsi', action),
   onFaceitState: (callback) => ipcRenderer.on('faceit:state', (_event, state) => callback(state)),
+  chatbotAuth: (action) => ipcRenderer.invoke('chatbot:auth', action),
+  onChatbotState: (callback) => ipcRenderer.on('chatbot:state', (_event, state) => callback(state)),
 });

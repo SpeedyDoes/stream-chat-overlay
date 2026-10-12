@@ -24,7 +24,7 @@ Look at the Streamlabs preview while the overlay is running. It shouldn't appear
 
 - **Minimize** it and it goes to the tray (the purple chat-bubble icon by the clock) while the overlay keeps running. Click the tray icon to bring it back.
 - **Close** it and the whole app quits, overlay included.
-- Settings are split into tabs: **Overlay, Chat, Appearance, Filters, Hotkeys, General**. A yellow dot marks a tab with unsaved changes.
+- Settings are split into tabs: **Overlay, Chat, Appearance, Filters, Games, Hotkeys, General**. **Games** has a subtab per game (**FACEIT**, **Krunker**). A yellow dot marks a tab with unsaved changes.
 - The **Overlay** tab (show/hide, move/resize, opacity, scale) applies instantly. Everything else applies when you click **Save** (or press Ctrl+S). Saving reloads the overlay.
 - The settings window is hidden from capture too, because it shows your channel and widget URL.
 - Turn on **Start minimized to tray** to skip the window on launch. It still opens if something needs your attention, such as no channel being set or a hotkey that's already taken.
@@ -48,13 +48,28 @@ These keys work only in move/resize mode: drag to move, **arrows** resize (hold 
 
 In the Streamlabs dashboard, go to **All Widgets → Chat Box** and copy the widget URL. Paste it into **Streamlabs chat widget URL** in the settings window. The overlay then shows that widget, styled the way you set it up in Streamlabs, with the same click-through and capture hiding. Keep that URL private.
 
+## Chat commands
+
+The app can answer a command in your Twitch chat. Replies are posted from a Twitch account you connect, either your own or a separate bot account.
+
+- **`!link`** posts your current Krunker game link from Krunker Vibe Client, e.g. "Current game: https://krunker.io/?game=FRA:8ixce". If the client isn't running or has no game yet, it replies "No game link right now." It answers at most once every 10 seconds.
+
+To set it up:
+
+1. Go to **General → Twitch account** and click **Connect**. Twitch opens in your browser with a code already filled in. Log in with the account that should post the replies and click **Authorize**.
+2. Go to **Games → Krunker**, turn on `!link` and click **Save**. The status should show "Listening in #yourchannel".
+
+The switch stays locked until a Twitch account is connected, and turns itself off if you disconnect. With `!link` off, the app doesn't connect to chat at all.
+
+The app never sees your password. It keeps a Twitch login token in `state.json`, encrypted so it only works for your Windows user. **Disconnect** removes it. If you don't open the app for 30 days, Twitch expires the login and you click Connect again.
+
 ## FACEIT stats on stream
 
 The app can show a small FACEIT panel **on your stream**: level (with progress to the next level), Elo, and for the current session: Elo gained or lost, wins/losses, K/D and ADR, plus your last 5 results and streak. K/D updates live during a match. No FACEIT developer account or API key is needed.
 
 ### 1. Turn it on
 
-Open the settings window, go to the **FACEIT** tab, enter your FACEIT nickname and click **Save**. The status should turn green and show your level and Elo.
+Open the settings window, go to **Games → FACEIT**, enter your FACEIT nickname and click **Save**. The status should turn green and show your level and Elo.
 
 ### 2. Set up CS2 match stats (for K/D and ADR)
 
@@ -64,7 +79,7 @@ This uses CS2's official **Game State Integration**: CS2 itself sends your kills
 
 ### 3. Add it to Streamlabs
 
-1. In the FACEIT tab, click **Copy** next to **Browser Source URL** (by default `http://127.0.0.1:4545/faceit`).
+1. In **Games → FACEIT**, click **Copy** next to **Browser Source URL** (by default `http://127.0.0.1:4545/faceit`).
 2. In Streamlabs, click **+** in your scene's Sources, pick **Browser Source**, and paste the URL.
 3. Set the size: **680 x 80** for the bar layout, **320 x 260** for the card layout. Then position it like any other source.
 
@@ -79,7 +94,7 @@ Pick **Bar** or **Card** under **Layout**. To use both in different scenes, add 
 - **K/D and ADR** come from CS2. Only competitive matches are tracked: deathmatch, casual, arms race, wingman and community/workshop servers (aim maps, headshot DM, ...) are ignored, so you can warm up between matches. A finished match only counts when your FACEIT Elo changes right after it, so Premier is left out too. During a match it counts live (shown as **LIVE**). If no Elo change follows within 15 minutes, that match drops out again.
 - A session starts at your Elo when the app first loads your stats. Elo +/- is your current Elo minus that number.
 - **A new session starts automatically** after 6 hours without a match (change this under **New session after**; 0 turns it off). Restarting the app or Streamlabs mid-stream keeps the session.
-- **Reset it yourself** with **Reset session** in the FACEIT tab, the tray menu, or **Ctrl+Shift+F11**.
+- **Reset it yourself** with **Reset session** in **Games → FACEIT**, the tray menu, or **Ctrl+Shift+F11**.
 
 Limits:
 - The profile endpoint is unofficial. FACEIT could change or block it, and the panel would then stop updating until the app is fixed.

@@ -30,6 +30,7 @@ settings-preload.js   Bridge for the settings window  (window.settings)
 settings.html/.css/.js Settings page: tabs, form, hotkey recorder, live overlay controls
 faceit.js             FACEIT tracker (main process): Elo polling, sessions, local web server
 gsi.js                CS2 Game State Integration: find CS2, write the cfg, follow matches
+chatbot.js            Chat commands (main process): Twitch sign-in, signed-in IRC connection, !link
 faceit-overlay.html/.css/.js  Browser Source page for Streamlabs/OBS, served by faceit.js
 assets/               icon.svg (large), icon-small.svg (16 px), generated icon.ico + PNGs
 scripts/build-icons.js Renders the SVGs to PNG/ICO using a hidden Electron window
@@ -105,6 +106,18 @@ CS2 (gamestate_integration_streamchatoverlay.cfg) -- POST /gsi --> faceit.js (ma
 - **Layout:** `faceitLayout` in config (`bar`/`card`), overridable per source with `?layout=`.
 - **Testing:** require `faceit.js` from a plain Node script after replacing `globalThis.fetch` with a fake profile endpoint. Then POST GSI payloads (`provider`, `map`, `player`, `auth.token`) to `/gsi` to play a match. Don't call `installGsi()` in tests: it writes into the real CS2 folder.
 
+### Chat commands (`chatbot.js`)
+
+The overlay only reads chat anonymously, so replying needs a second, signed-in connection. It runs in the main process and only exists while a command is turned on (`linkCommand`). With it off, nothing connects and nothing is fetched.
+
+The account is under **General → Twitch account**; each command lives on its game's subtab (`!link` on **Games → Krunker**). A command can't be on without an account: the settings page disables its switch, and `dropCommandsWithoutAccount()` in `main.js` switches it off on save and whenever the account goes away (Disconnect or an expired sign-in). Add new commands to that function too.
+
+- **Sign-in:** Twitch's device code flow with scopes `chat:read chat:edit`. Connect asks `id.twitch.tv/oauth2/device` for a code, opens `twitch.tv/activate` in the browser, and polls `/oauth2/token` until the user accepts. `TWITCH_CLIENT_ID` at the top of `chatbot.js` is a **Public** client from dev.twitch.tv/console/apps (no secret; the redirect URL is unused, `http://localhost` is fine). Without it, the Connect button is disabled.
+- **Tokens:** `twitchAuth` in state.json = `{ login, tokens }`, where `tokens` is `{ access, refresh }` sealed with `safeStorage` (Windows DPAPI). Access tokens last about 4 hours; `accessToken()` validates before every connect and refreshes when it's expired or under 10 minutes. Refresh tokens are single-use, so refreshes are serialized and the new one is saved each time. They expire after 30 days unused; a failed refresh signs out with "Twitch sign-in expired". The token is re-validated hourly, as Twitch requires.
+- **Connection:** IRC over WebSocket with `PASS oauth:<token>`, joining the Chat tab's channel. Same backoff and dead-socket check as the overlay. A "Login authentication failed" NOTICE triggers one refresh and reconnect.
+- **`!link`:** an exact match (trimmed, case-insensitive, invisible duplicate-bypass characters removed). 10 s global cooldown, counted from the trigger, so concurrent `!link`s can't race. `fetchGameLink()` GETs `http://127.0.0.1:47615/link` from Krunker Vibe Client with a 2 s timeout and never throws. It returns `{"link": "<url>" | null}` and sends no CORS headers, which is why this lives in the main process. Only links matching `GAME_LINK` (`https://krunker.io/?game=` with no whitespace) are posted; anything else, a refused connection or a timeout replies "No game link right now."
+- **Testing:** require `chatbot.js` from a plain Node script (`ELECTRON_RUN_AS_NODE=1 electron.exe`) . Replace `globalThis.fetch` for the `id.twitch.tv` URLs and `globalThis.WebSocket` with a fake that records `send()`, then push `PRIVMSG` lines. Point the Krunker URL at a stub server on another port if the real client is running.
+
 ### Edit mode (move/resize)
 
 - `setEditing(true)` makes the overlay accept the mouse and injects `EDIT_CSS` with `webContents.insertCSS`. That adds the dashed border, the banner and `-webkit-app-region: drag`. Because it's injected CSS, it also works in widget mode, where we don't control the page.
@@ -132,8 +145,10 @@ Every handler checks the sender (`fromSettings` / `fromOverlay`), so neither pag
 | `hotkeys:suspend` | settings → main | Pause/resume global hotkeys while recording |
 | `overlay:state` | main → settings | Push `{ visible, editing, opacity, zoom, status }` whenever it changes |
 | `faceit:reset` | settings → main (invoke) | Start a new FACEIT session now |
-| `faceit:state` | main → settings | Push `{ status, url, gsi, session }` for the FACEIT tab |
+| `faceit:state` | main → settings | Push `{ status, url, gsi, session }` for Games → FACEIT |
 | `faceit:gsi` | settings → main (invoke) | `install` (find CS2 or ask for the folder, write the cfg) or `remove` |
+| `chatbot:auth` | settings → main (invoke) | `login` (start device code sign-in), `cancel` or `logout` |
+| `chatbot:state` | main → settings | Push `{ status, account, pending: { code }, ready }` for General → Twitch account and Games → Krunker |
 
 Saving **recreates** the overlay window instead of updating it in place. The overlay mode and its preload are fixed when the window is created, and recreating it is simpler and more reliable than patching live state. The new window is created before the old one is destroyed, so the app never has zero windows.
 
@@ -162,8 +177,8 @@ Everything lives in `%APPDATA%\Stream Chat Overlay\`, which is `app.getPath('use
 
 | File | Contents | Written when |
 |---|---|---|
-| `config.json` | Everything on the Chat, Appearance, Filters, FACEIT, Hotkeys and General tabs | Save in the settings window |
-| `state.json` | Overlay `bounds`, `opacity`, `zoom`; `faceitSession`, `faceitHistory`, `faceitGsi` | Move, resize, opacity or scale changes; FACEIT session start/reset and new matches |
+| `config.json` | Everything on the Chat, Appearance, Filters, Games, Hotkeys and General tabs | Save in the settings window |
+| `state.json` | Overlay `bounds`, `opacity`, `zoom`; `faceitSession`, `faceitHistory`, `faceitGsi`; `twitchAuth` (DPAPI-encrypted tokens) | Move, resize, opacity or scale changes; FACEIT session start/reset and new matches; Twitch sign-in and token refreshes |
 | Chromium folders (`Cache`, `Local Storage`, …) | Electron's own data. Local Storage remembers the last open settings tab | Automatically |
 
 - **Config is sanitized on every load and save** (`sanitizeConfig`). Unknown keys are dropped, numbers are clamped, and bad values fall back to defaults. If `config.json` can't be parsed, the app runs with defaults and the settings window shows the error.
@@ -188,6 +203,8 @@ Unsaved-change tracking and the per-tab dots work automatically once the field i
 ### Add a settings tab
 
 Add a `<button role="tab" id="tab-x" aria-controls="panel-x">` to `#tabs`, and a `<section class="panel" id="panel-x" role="tabpanel" aria-labelledby="tab-x" hidden>` inside the form. The tab script picks both up automatically.
+
+**A new game** goes under Games instead: add a tab to `#gameTabs` and a `<section class="subpanel" id="panel-x" role="tabpanel" aria-labelledby="tab-x" hidden>` inside `#panel-games`. Any `[role=tablist]` works the same way: arrow keys, remembering the last tab (`tab:<list id>` in Local Storage), and unsaved-change dots on the subtab and its parent tab.
 
 ### Add a hotkey action
 
@@ -237,10 +254,11 @@ How the installer behaves (`build.nsis` in `package.json`):
 There are no automated tests. Run through this list before a release:
 
 - [ ] Overlay connects; the settings header shows "Connected to #channel"; messages and emotes show up
-- [ ] FACEIT tab: status turns green with level and Elo; a wrong nickname shows a clear error
+- [ ] Games → FACEIT: status turns green with level and Elo; a wrong nickname shows a clear error
 - [ ] CS2 match stats: Set up writes the cfg; after restarting CS2 the tab shows "Receiving data"; Remove deletes it
 - [ ] The Browser Source URL shows the panel in Streamlabs (bar and card); K/D shows LIVE in a match; W/L and Elo update within a minute after it
 - [ ] Reset session (button, tray, Ctrl+Shift+F11) zeroes the session numbers; restarting the app keeps the session
+- [ ] Games → Krunker: the `!link` switch is locked until General → Twitch account is connected. Connect shows a code and opens twitch.tv/activate; after accepting and turning `!link` on, the status shows "Listening in #channel". `!link` posts the game link (Krunker Vibe Client running) or "No game link right now." (closed), and a second `!link` within 10 s is ignored. Turning it off disconnects; Disconnect turns it off
 - [ ] Messages fade after the configured time; deleted and banned messages disappear
 - [ ] Ctrl+Shift+F8 / F9 / F10 work, including over CS2 in *Fullscreen Windowed*
 - [ ] Edit mode: drag, arrows, Shift+arrows, `+`/`-`/`0`, Esc. Afterwards, arrows work normally in other apps

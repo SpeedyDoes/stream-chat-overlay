@@ -4,10 +4,11 @@
 // anti-cheat friendly. It is click-through, never takes focus, and is excluded from capture.
 // A normal settings window controls it; minimizing that hides to the tray, closing it quits.
 
-const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeTheme, screen, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, globalShortcut, Tray, Menu, nativeTheme, screen, ipcMain, dialog, safeStorage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createFaceitTracker } = require('./faceit');
+const { createChatBot } = require('./chatbot');
 
 // Must match "build.appId" in package.json; the installer's shortcuts use it too.
 const APP_ID = 'com.speedydoes.streamchatoverlay';
@@ -42,6 +43,7 @@ const DEFAULT_CONFIG = {
   faceitLayout: 'bar',
   faceitSessionResetHours: 6,
   faceitPort: 4545,
+  linkCommand: false,
   hotkeys: {
     toggleVisible: 'Control+Shift+F8',
     editMode: 'Control+Shift+F9',
@@ -87,6 +89,7 @@ let failedHotkeys = [];
 let quitting = false;
 let trayHintShown = false;
 let faceit;
+let chatbot;
 
 // ---------- config & state ----------
 
@@ -131,6 +134,7 @@ function sanitizeConfig(input = {}) {
     faceitLayout: FACEIT_LAYOUTS.includes(input.faceitLayout) ? input.faceitLayout : d.faceitLayout,
     faceitSessionResetHours: clampNumber(input.faceitSessionResetHours, 0, 72, d.faceitSessionResetHours),
     faceitPort: Math.round(clampNumber(input.faceitPort, 1024, 65535, d.faceitPort)),
+    linkCommand: bool('linkCommand'),
     hotkeys,
   };
 }
@@ -227,6 +231,17 @@ function pushState() {
 
 function pushFaceit() {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('faceit:state', faceit.state());
+}
+
+function pushChatbot() {
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('chatbot:state', chatbot.state());
+}
+
+// Chat commands reply from the connected Twitch account, so they're switched off without one.
+function dropCommandsWithoutAccount() {
+  if (!config.linkCommand || chatbot.state().account) return false;
+  config.linkCommand = false;
+  return true;
 }
 
 function setStatus(kind, text) {
@@ -528,12 +543,15 @@ function registerIpc() {
 
   ipcMain.handle('settings:load', (event) => {
     if (!fromSettings(event)) return null;
-    return { config, configError, failedHotkeys, overlay: overlayState(), faceit: faceit.state(), installed: app.isPackaged };
+    return {
+      config, configError, failedHotkeys, overlay: overlayState(), faceit: faceit.state(), chatbot: chatbot.state(), installed: app.isPackaged,
+    };
   });
 
   ipcMain.handle('settings:save', (event, input) => {
     if (!fromSettings(event)) return null;
     config = sanitizeConfig(input);
+    dropCommandsWithoutAccount();
     configError = null;
     writeConfig(config);
     applyLaunchAtStartup();
@@ -541,6 +559,7 @@ function registerIpc() {
     settingsWin.setContentProtection(config.hideFromCapture);
     recreateOverlay();
     faceit.configure(config);
+    chatbot.configure(config);
     return { config, failedHotkeys };
   });
 
@@ -552,6 +571,13 @@ function registerIpc() {
     if (action === 'install') return faceit.installGsi();
     if (action === 'remove') faceit.removeGsi();
     return null;
+  });
+
+  ipcMain.handle('chatbot:auth', (event, action) => {
+    if (!fromSettings(event)) return;
+    if (action === 'login') chatbot.login();
+    else if (action === 'cancel') chatbot.cancelLogin();
+    else if (action === 'logout') chatbot.logout();
   });
 
   ipcMain.handle('overlay:control', (event, action, value) => {
@@ -599,15 +625,16 @@ if (!app.requestSingleInstanceLock()) {
     createOverlay();
     failedHotkeys = registerHotkeys();
 
+    const store = {
+      get: (key) => state[key] ?? null,
+      set: (key, value) => {
+        state[key] = value;
+        writeState();
+      },
+    };
     faceit = createFaceitTracker({
       appDir: __dirname,
-      store: {
-        get: (key) => state[key] ?? null,
-        set: (key, value) => {
-          state[key] = value;
-          writeState();
-        },
-      },
+      store,
       // Only asked when CS2 can't be found automatically.
       pickFolder: async () => {
         const result = await dialog.showOpenDialog(settingsWin, {
@@ -619,6 +646,21 @@ if (!app.requestSingleInstanceLock()) {
       onStatus: pushFaceit,
     });
     faceit.configure(config);
+
+    chatbot = createChatBot({
+      store,
+      // Twitch tokens are encrypted with Windows DPAPI, so a copied state.json is useless elsewhere.
+      secrets: {
+        seal: (text) => safeStorage.encryptString(text).toString('base64'),
+        open: (sealed) => safeStorage.decryptString(Buffer.from(sealed, 'base64')),
+      },
+      openUrl: (url) => shell.openExternal(url),
+      onStatus: () => {
+        if (dropCommandsWithoutAccount()) writeConfig(config);
+        pushChatbot();
+      },
+    });
+    chatbot.configure(config);
 
     const quiet = config.startMinimized || process.argv.includes(STARTUP_ARG);
     const needsSetup = !config.twitchChannel && !isWidgetMode();
@@ -632,5 +674,6 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     if (faceit) faceit.stop();
+    if (chatbot) chatbot.stop();
   });
 }

@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 
 const TEXT = ['twitchChannel', 'widgetUrl', 'faceitNickname', 'faceitLayout'];
 const NUMBERS = ['fontSize', 'fadeAfterSeconds', 'maxMessages', 'faceitSessionResetHours', 'faceitPort'];
-const SWITCHES = ['showEmotes', 'showSubsAndRaids', 'hideCommands', 'hideFromCapture', 'launchAtStartup', 'startMinimized'];
+const SWITCHES = ['showEmotes', 'showSubsAndRaids', 'hideCommands', 'hideFromCapture', 'launchAtStartup', 'startMinimized', 'linkCommand'];
 const LISTS = ['ignoreUsers', 'highlightWords'];
 const HOTKEYS = {
   toggleVisible: 'Show / hide',
@@ -56,9 +56,14 @@ function readForm() {
   return config;
 }
 
-const panelOf = (element) => element.closest('[role=tabpanel]').id;
+// The panel an element is on, plus the panels around it (a game's subpanel sits inside Games).
+function panelsOf(element) {
+  const ids = [];
+  for (let p = element.closest('[role=tabpanel]'); p; p = p.parentElement.closest('[role=tabpanel]')) ids.push(p.id);
+  return ids;
+}
 
-// Which tabs hold fields that differ from what's saved.
+// Which tabs and subtabs hold fields that differ from what's saved.
 function dirtyPanels() {
   const current = readForm();
   const base = JSON.parse(snapshot);
@@ -66,10 +71,10 @@ function dirtyPanels() {
   for (const key of Object.keys(current)) {
     if (key === 'hotkeys') {
       for (const name of Object.keys(HOTKEYS)) {
-        if (current.hotkeys[name] !== base.hotkeys[name]) panels.add(panelOf(hotkeyButton(name)));
+        if (current.hotkeys[name] !== base.hotkeys[name]) panelsOf(hotkeyButton(name)).forEach((id) => panels.add(id));
       }
     } else if (JSON.stringify(current[key]) !== JSON.stringify(base[key])) {
-      panels.add(panelOf($(key)));
+      panelsOf($(key)).forEach((id) => panels.add(id));
     }
   }
   return panels;
@@ -207,10 +212,15 @@ function onRecordKey(event) {
 
 // ---------- tabs ----------
 
-const tabs = [...document.querySelectorAll('#tabs [role=tab]')];
+// The top tabs (#tabs) and the subtabs inside a panel (e.g. #gameTabs) work the same way.
+const tabs = [...document.querySelectorAll('[role=tab]')];
+const tablists = [...document.querySelectorAll('[role=tablist]')];
+const tabsIn = (list) => [...list.querySelectorAll('[role=tab]')];
+const storageKey = (list) => (list.id === 'tabs' ? 'tab' : `tab:${list.id}`);
 
 function selectTab(tab, focus) {
-  for (const t of tabs) {
+  const list = tab.closest('[role=tablist]');
+  for (const t of tabsIn(list)) {
     const selected = t === tab;
     t.setAttribute('aria-selected', String(selected));
     t.tabIndex = selected ? 0 : -1;
@@ -218,7 +228,7 @@ function selectTab(tab, focus) {
   }
   if (focus) tab.focus();
   try {
-    localStorage.setItem('tab', tab.id);
+    localStorage.setItem(storageKey(list), tab.id);
   } catch {
     // storage unavailable; the first tab is a fine default
   }
@@ -226,20 +236,25 @@ function selectTab(tab, focus) {
 
 for (const tab of tabs) tab.addEventListener('click', () => selectTab(tab));
 
-$('tabs').addEventListener('keydown', (e) => {
-  const i = tabs.indexOf(document.activeElement);
-  if (i === -1) return;
-  const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
-  if (next === undefined) return;
-  e.preventDefault();
-  selectTab(tabs[(next + tabs.length) % tabs.length], true);
-});
+for (const list of tablists) {
+  list.addEventListener('keydown', (e) => {
+    const own = tabsIn(list);
+    const i = own.indexOf(document.activeElement);
+    if (i === -1) return;
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: own.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    selectTab(own[(next + own.length) % own.length], true);
+  });
+}
 
-function initialTab() {
+function initialTab(list) {
+  const own = tabsIn(list);
   try {
-    return $(localStorage.getItem('tab')) || tabs[0];
+    const saved = $(localStorage.getItem(storageKey(list)));
+    return own.includes(saved) ? saved : own[0];
   } catch {
-    return tabs[0];
+    return own[0];
   }
 }
 
@@ -342,6 +357,48 @@ $('faceitCopy').addEventListener('click', async () => {
   setTimeout(() => { $('faceitCopy').textContent = 'Copy'; }, 2000);
 });
 
+// ---------- chat commands ----------
+
+let chatbot = { pending: null, account: null };
+const LINK_HINT = 'Replies with your current game link, or "No game link right now." Once every 10 seconds at most.';
+
+function applyChatbotState(next) {
+  chatbot = next;
+  $('chatbotStatus').className = `status ${next.status.kind}`;
+  $('chatbotStatusText').textContent = next.status.text;
+  const account = $('chatbotAccount');
+  account.className = '';
+  if (next.pending) {
+    account.textContent = next.pending.code
+      ? `Enter code ${next.pending.code} on the Twitch page that just opened (twitch.tv/activate).`
+      : 'Asking Twitch for a code...';
+    account.className = 'good';
+  } else if (next.account) {
+    account.textContent = `Connected as ${next.account}`;
+  } else {
+    account.textContent = 'Not connected';
+  }
+  $('chatbotLogin').textContent = next.pending ? 'Cancel' : next.account ? 'Switch account' : 'Connect';
+  $('chatbotLogin').disabled = !next.ready;
+  $('chatbotLogout').classList.toggle('hidden', !next.account || Boolean(next.pending));
+
+  // Commands reply from this account, so they stay off without one. main.js has already switched
+  // a saved command off when the account went away; mirror that here without marking it unsaved.
+  const connected = Boolean(next.account);
+  $('linkCommand').disabled = !connected;
+  $('linkCommandHint').textContent = connected ? LINK_HINT : 'Connect your Twitch account under General first.';
+  $('linkCommandHint').className = connected ? '' : 'bad';
+  if (!connected && saved && saved.linkCommand) {
+    saved = { ...saved, linkCommand: false };
+    snapshot = JSON.stringify({ ...JSON.parse(snapshot), linkCommand: false });
+  }
+  if (!connected) $('linkCommand').checked = false;
+  refresh();
+}
+
+$('chatbotLogin').addEventListener('click', () => api.chatbotAuth(chatbot.pending ? 'cancel' : 'login'));
+$('chatbotLogout').addEventListener('click', () => api.chatbotAuth('logout'));
+
 // ---------- wiring ----------
 
 $('config').addEventListener('input', refresh);
@@ -371,7 +428,7 @@ window.addEventListener('blur', () => {
   if (recording) stopRecording();
 });
 
-selectTab(initialTab());
+for (const list of tablists) selectTab(initialTab(list));
 
 (async () => {
   const data = await api.load();
@@ -384,6 +441,8 @@ selectTab(initialTab());
   api.onOverlayState(applyOverlayState);
   applyFaceitState(data.faceit);
   api.onFaceitState(applyFaceitState);
+  applyChatbotState(data.chatbot);
+  api.onChatbotState(applyChatbotState);
 
   if (data.configError) {
     setNotice('error', `config.json couldn't be read (${data.configError}). Showing defaults; Save overwrites it.`);

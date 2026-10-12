@@ -154,7 +154,46 @@ main { flex: 1; overflow-y: auto; }
 .field em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 400; }
 .field .note { color: var(--warn); }
 
-.panel > :last-child { border-bottom: 0; }
+.panel > :last-child, .subpanel > :last-child { border-bottom: 0; }
+
+h2.group { margin: 26px 0 0; font-size: 14px; font-weight: 600; }
+h2.group + .intro { margin-top: 2px; }
+
+/* Second-level tabs inside a panel, e.g. one per game */
+.subtabs {
+  display: flex;
+  gap: 4px;
+  margin: 14px 0 2px;
+  padding: 3px;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  width: fit-content;
+}
+.subtabs [role=tab] {
+  position: relative;
+  padding: 4px 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.subtabs [role=tab]:hover { color: var(--text); }
+.subtabs [role=tab][aria-selected=true] { background: var(--accent-soft); color: var(--text); }
+.subtabs [role=tab].dirty::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  background: var(--warn);
+  border-radius: 50%;
+}
 
 input[type=text], input[type=url], input[type=password], input[type=number], textarea, select {
   width: 100%;
